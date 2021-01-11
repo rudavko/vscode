@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as vscode from 'vscode';
+import * as nls from 'vscode-nls';
 import { Node, HtmlNode, Rule, Property, Stylesheet } from 'EmmetFlatNode';
 import { getEmmetHelper, getFlatNode, getMappingForIncludedLanguages, validate, getEmmetConfiguration, isStyleSheet, getEmmetMode, parsePartialStylesheet, isStyleAttribute, getEmbeddedCssNodeIfAny, allowedMimeTypesInScriptTag, toLSTextDocument } from './util';
 import { getRootNode as parseDocument } from './parseDocument';
@@ -25,6 +26,8 @@ const hexColorRegex = /^#[\da-fA-F]{0,6}$/;
  * The expansion attempts are stored per extension reload.
  */
 let previousItems: Set<string> = new Set();
+
+const localize = nls.loadMessageBundle();
 
 interface ExpandAbbreviationInput {
 	syntax: string;
@@ -260,7 +263,7 @@ function doWrapping(_: boolean, args: any) {
 			let valueToUse = '';
 			let accepted = false;
 			let changeRecommendations = true;
-			pick.title = 'Enter abbreviation, or choose a previous one';
+			pick.title = localize('emmetEnterAbbreviationForWrap', 'Enter abbreviation, or choose a previous one');
 			pick.canSelectMany = false;
 			pick.items = getHistoryAsQuickPickItems();
 
