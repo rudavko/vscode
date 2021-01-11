@@ -18,6 +18,14 @@ const hexColorRegex = /^#[\da-fA-F]{0,6}$/;
 // 	's', 'samp', 'select', 'small', 'span', 'strike', 'strong', 'sub', 'sup',
 // 	'textarea', 'tt', 'u', 'var'];
 
+
+/**
+ * Stores previous expansion attempts for Wrap with Abbreviation commands.
+ * Both successful (accepted) and non-successful (cancelled) expansion attempts are stored.
+ * The expansion attempts are stored per vscode window.
+ */
+let previousItems: Set<string> = new Set();
+
 interface ExpandAbbreviationInput {
 	syntax: string;
 	abbreviation: string;
@@ -236,12 +244,63 @@ function doWrapping(_: boolean, args: any) {
 		return '';
 	}
 
-	const abbreviationPromise: Thenable<string | undefined> = (args && args['abbreviation']) ?
-		Promise.resolve(args['abbreviation']) :
-		vscode.window.showInputBox({ prompt: 'Enter Abbreviation', validateInput: inputChanged });
-	return abbreviationPromise.then(inputAbbreviation => {
-		return makeChanges(inputAbbreviation, true);
-	});
+	function getAbbreviationFromQuickPick(): Thenable<string> {
+		return new Promise<string>((resolve) => {
+			const pick = vscode.window.createQuickPick();
+			let valueToUse = '';
+			let accepted = false;
+			pick.title = 'Enter abbreviation, or choose a previous one';
+			pick.canSelectMany = false;
+			pick.items = [];
+			pick.activeItems = [];
+			pick.onDidChangeValue(e => {
+				valueToUse = e;
+				// create items to display in the quick pick
+				let items = Array.from(previousItems)
+					.map(item => {
+						const quickPickItem: vscode.QuickPickItem = {
+							label: item
+						};
+						return quickPickItem;
+					});
+				if (valueToUse) {
+					// filter items like a search box
+					items = items.filter(item => item.label.startsWith(valueToUse));
+				}
+				pick.items = items;
+				// update editor preview
+				inputChanged(valueToUse);
+			});
+			pick.onDidChangeSelection((e) => {
+				if (e.length) {
+					valueToUse = e[0].label;
+					accepted = true;
+				}
+				pick.hide();
+			});
+			pick.onDidAccept(() => {
+				accepted = true;
+				pick.hide();
+			});
+			pick.onDidHide(() => {
+				if (accepted) {
+					previousItems.add(valueToUse);
+					resolve(valueToUse);
+				} else {
+					resolve('');
+				}
+			});
+			pick.show();
+		});
+	}
+
+	if (args && args['abbreviation']) {
+		return makeChanges(args['abbreviation'], true);
+	} else {
+		return getAbbreviationFromQuickPick().then(abbreviation => {
+			return makeChanges(abbreviation, true);
+		});
+	}
 }
 
 export function expandEmmetAbbreviation(args: any): Thenable<boolean | undefined> {
