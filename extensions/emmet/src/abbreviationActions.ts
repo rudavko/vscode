@@ -22,7 +22,7 @@ const hexColorRegex = /^#[\da-fA-F]{0,6}$/;
 /**
  * Stores previous expansion attempts for Wrap with Abbreviation commands.
  * Both successful (accepted) and non-successful (cancelled) expansion attempts are stored.
- * The expansion attempts are stored per vscode window.
+ * The expansion attempts are stored per extension reload.
  */
 let previousItems: Set<string> = new Set();
 
@@ -244,39 +244,56 @@ function doWrapping(_: boolean, args: any) {
 		return '';
 	}
 
+	function getHistoryAsQuickPickItems(): vscode.QuickPickItem[] {
+		return Array.from(previousItems)
+			.map(item => {
+				const quickPickItem: vscode.QuickPickItem = {
+					label: item
+				};
+				return quickPickItem;
+			});
+	}
+
 	function getAbbreviationFromQuickPick(): Thenable<string> {
 		return new Promise<string>((resolve) => {
 			const pick = vscode.window.createQuickPick();
 			let valueToUse = '';
 			let accepted = false;
+			let changeRecommendations = true;
 			pick.title = 'Enter abbreviation, or choose a previous one';
 			pick.canSelectMany = false;
-			pick.items = [];
-			pick.activeItems = [];
+			pick.items = getHistoryAsQuickPickItems();
+
 			pick.onDidChangeValue(e => {
 				valueToUse = e;
-				// create items to display in the quick pick
-				let items = Array.from(previousItems)
-					.map(item => {
-						const quickPickItem: vscode.QuickPickItem = {
-							label: item
-						};
-						return quickPickItem;
-					});
-				if (valueToUse) {
-					// filter items like a search box
-					items = items.filter(item => item.label.startsWith(valueToUse));
+				if (changeRecommendations) {
+					// create items to display in the quick pick
+					let items = getHistoryAsQuickPickItems();
+					if (valueToUse) {
+						// filter items like a search box
+						items = items.filter(item => item.label.startsWith(valueToUse));
+					}
+					pick.items = items;
 				}
-				pick.items = items;
+				changeRecommendations = true;
 				// update editor preview
 				inputChanged(valueToUse);
 			});
+			pick.onDidChangeActive((e) => {
+				// firing this event means the user has selected a value
+				// to fill the input box with via arrow keys
+				if (e.length) {
+					pick.value = e[0].label;
+				}
+				// show the same recommendations as before
+				changeRecommendations = false;
+			});
 			pick.onDidChangeSelection((e) => {
+				// this calls onDidAccept which calls onDidHide,
+				// so only set valueToUse here
 				if (e.length) {
 					valueToUse = e[0].label;
-					accepted = true;
 				}
-				pick.hide();
 			});
 			pick.onDidAccept(() => {
 				accepted = true;
